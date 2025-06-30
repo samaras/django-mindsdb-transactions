@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindsDB Knowledge Base Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .card { box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); margin-bottom: 20px; }
+        .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; }
+        .result-card { border-left: 4px solid #667eea; margin-bottom: 10px; }
+        .loading { display: none; }
+        .error-message { color: #dc3545; background-color: #f8d7da; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .ai-summary { background-color: #f8f9fa; border-left: 4px solid #28a745; padding: 10px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid mt-4">
+        <h1 class="text-center mb-4">MindsDB Knowledge Base Dashboard</h1>
+
+        <!-- Connection Status and Stats -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5>Connection Status</h5>
+                        <div id="connectionStatus">Checking...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5>Knowledge Base Stats</h5>
+                        <div id="kbStats">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Query Interface -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Predefined Queries</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Wealthy Clients -->
+                        <div class="mb-3">
+                            <h6>Wealthy Clients Search</h6>
+                            <div class="row">
+                                <div class="col-6">
+                                    <input type="number" id="minAge" class="form-control" placeholder="Min Age" value="40">
+                                </div>
+                                <div class="col-6">
+                                    <input type="number" id="minIncome" class="form-control" placeholder="Min Income" value="70000">
+                                </div>
+                            </div>
+                            <button class="btn btn-primary btn-sm mt-2" onclick="searchWealthyClients()">Search</button>
+                        </div>
+
+                        <!-- Travel Expenses -->
+                        <div class="mb-3">
+                            <h6>Travel Expenses Search</h6>
+                            <div class="row">
+                                <div class="col-6">
+                                    <input type="number" id="minAmount" class="form-control" placeholder="Min Amount" value="500">
+                                </div>
+                                <div class="col-6">
+                                    <select id="useChip" class="form-control">
+                                        <option value="true">Use Chip</option>
+                                        <option value="false">Swipe</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary btn-sm mt-2" onclick="searchTravelExpenses()">Search</button>
+                        </div>
+
+                        <!-- Online Shopping -->
+                        <div class="mb-3">
+                            <h6>Online Shopping Search</h6>
+                            <div class="row">
+                                <div class="col-8">
+                                    <input type="text" id="state" class="form-control" placeholder="State" value="California">
+                                </div>
+                                <div class="col-4">
+                                    <button class="btn btn-primary btn-sm" onclick="searchOnlineShopping()">Search</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AI-Powered Searches -->
+                        <div class="mb-3">
+                            <h6>AI-Powered Analysis</h6>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-warning btn-sm" onclick="searchSuspiciousTransactions()">Suspicious Transactions</button>
+                                <button class="btn btn-info btn-sm" onclick="searchUnusualSpending()">Unusual Spending</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Search -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Custom Semantic Search</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="searchTerm" class="form-label">Search Term</label>
+                            <input type="text" id="searchTerm" class="form-control" placeholder="Enter natural language search term">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="kbType" class="form-label">Knowledge Base</label>
+                            <select id="kbType" class="form-control">
+                                <option value="transaction">Transaction KB</option>
+                                <option value="client">Client KB</option>
+                            </select>
+                        </div>
+
+                        <button class="btn btn-primary" onclick="performCustomSearch()">Search</button>
+                    </div>
+                </div>
+
+                <!-- Custom SQL Query -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5>Custom SQL Query</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="sqlQuery" class="form-label">SQL Query</label>
+                            <textarea id="sqlQuery" class="form-control" rows="4" placeholder="Enter your SQL query here..."></textarea>
+                        </div>
+                        <button class="btn btn-secondary" onclick="executeCustomQuery()">Execute Query</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Results <span id="resultCount" class="badge bg-primary">0 results</span></h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="loading" class="loading text-center">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-2">Executing query...</p>
+                        </div>
+                        <div id="errorMessage" class="error-message" style="display: none;"></div>
+                        <div id="resultsContainer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            checkConnectionStatus();
+            loadKnowledgeBaseStats();
+        });
+
+        // Connection status check
+        async function checkConnectionStatus() {
+            try {
+                const response = await fetch('/finance/api/mindsdb/stats/');
+                const data = await response.json();
+                
+                const statusElement = document.getElementById('connectionStatus');
+                if (data.success && data.connection_status) {
+                    statusElement.innerHTML = '<span class="badge bg-success">Connected</span>';
+                } else {
+                    statusElement.innerHTML = '<span class="badge bg-danger">Disconnected</span>';
+                }
+            } catch (error) {
+                document.getElementById('connectionStatus').innerHTML = '<span class="badge bg-danger">Error</span>';
+            }
+        }
+
+        // Load knowledge base stats
+        async function loadKnowledgeBaseStats() {
+            try {
+                const response = await fetch('/finance/api/mindsdb/stats/');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.knowledge_base_stats;
+                    document.getElementById('kbStats').innerHTML = `
+                        <div>Client KB: ${stats.client_kb_count} records</div>
+                        <div>Transaction KB: ${stats.transaction_kb_count} records</div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('kbStats').innerHTML = 'Error loading stats';
+            }
+        }
+
+        // Show loading state
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('resultsContainer').innerHTML = '';
+        }
+
+        // Hide loading state
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Show error message
+        function showError(message) {
+            hideLoading();
+            const errorElement = document.getElementById('errorMessage');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+
+        // Display results
+        function displayResults(data, queryType) {
+            hideLoading();
+            
+            const container = document.getElementById('resultsContainer');
+            const countElement = document.getElementById('resultCount');
+            
+            countElement.textContent = `${data.count} results`;
+            
+            if (data.count === 0) {
+                container.innerHTML = '<div class="alert alert-info">No results found.</div>';
+                return;
+            }
+
+            let html = '<div class="row">';
+            
+            data.results.forEach((result, index) => {
+                html += '<div class="col-md-6 mb-3">';
+                html += '<div class="card result-card">';
+                html += '<div class="card-body">';
+                
+                // Display based on query type
+                switch(queryType) {
+                    case 'wealthy_clients':
+                        html += `
+                            <h6>Client ${result.client_id}</h6>
+                            <p><strong>Address:</strong> ${result.address}</p>
+                            <p><strong>Age:</strong> ${result.current_age}</p>
+                            <p><strong>Income:</strong> $${result.per_capita_income}</p>
+                            <p><strong>Gender:</strong> ${result.gender}</p>
+                        `;
+                        break;
+                        
+                    case 'travel_expenses':
+                        html += `
+                            <h6>Transaction ${result.transaction_id}</h6>
+                            <p><strong>Amount:</strong> $${result.amount}</p>
+                            <p><strong>Date:</strong> ${new Date(result.date).toLocaleDateString()}</p>
+                            <p><strong>Merchant:</strong> ${result.merchant_city}, ${result.merchant_state}</p>
+                            <p><strong>Chip Used:</strong> ${result.use_chip ? 'Yes' : 'No'}</p>
+                        `;
+                        break;
+                        
+                    case 'suspicious_transactions':
+                    case 'unusual_spending':
+                        html += `
+                            <h6>Transaction ${result.transaction_id}</h6>
+                            <p><strong>Amount:</strong> $${result.amount}</p>
+                            <p><strong>Date:</strong> ${new Date(result.date).toLocaleDateString()}</p>
+                            <p><strong>Merchant:</strong> ${result.merchant_city}, ${result.merchant_state}</p>
+                        `;
+                        if (result.summary) {
+                            html += `<div class="ai-summary"><strong>AI Summary:</strong> ${result.summary}</div>`;
+                        }
+                        break;
+                        
+                    default:
+                        // Generic display for custom searches
+                        html += '<h6>Result</h6>';
+                        for (const [key, value] of Object.entries(result)) {
+                            html += `<p><strong>${key}:</strong> ${value}</p>`;
+                        }
+                }
+                
+                html += '</div></div></div>';
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // Predefined query functions
+        async function searchWealthyClients() {
+            showLoading();
+            try {
+                const minAge = document.getElementById('minAge').value;
+                const minIncome = document.getElementById('minIncome').value;
+                
+                const response = await fetch(`/finance/api/mindsdb/wealthy-clients/?min_age=${minAge}&min_income=${minIncome}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data, 'wealthy_clients');
+                } else {
+                    showError(data.error || 'An error occurred');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        async function searchTravelExpenses() {
+            showLoading();
+            try {
+                const minAmount = document.getElementById('minAmount').value;
+                const useChip = document.getElementById('useChip').value;
+                
+                const response = await fetch(`/finance/api/mindsdb/travel-expenses/?min_amount=${minAmount}&use_chip=${useChip}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data, 'travel_expenses');
+                } else {
+                    showError(data.error || 'An error occurred');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        async function searchOnlineShopping() {
+            showLoading();
+            try {
+                const state = document.getElementById('state').value;
+                
+                const response = await fetch(`/finance/api/mindsdb/online-shopping/?state=${encodeURIComponent(state)}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data, 'online_shopping');
+                } else {
+                    showError(data.error || 'An error occurred');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        async function searchSuspiciousTransactions() {
+            showLoading();
+            try {
+                const response = await fetch('/finance/api/mindsdb/suspicious-transactions/');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data, 'suspicious_transactions');
+                } else {
+                    showError(data.error || 'An error occurred');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        async function searchUnusualSpending() {
+            showLoading();
+            try {
+                const response = await fetch('/finance/api/mindsdb/unusual-spending/');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data, 'unusual_spending');
+                } else {
+                    showError(data.error || 'An error occurred');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        async function performCustomSearch() {
+            showLoading();
+            try {
+                const searchTerm = document.getElementById('searchTerm').value;
+                const kbType = document.getElementById('kbType').value;
+                
+                if (!searchTerm) {
+                    showError('Search term is required');
+                    return;
+                }
+                
+                const response = await fetch(`/finance/api/mindsdb/custom-search/?search_term=${encodeURIComponent(searchTerm)}&kb_type=${kbType}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data, 'custom_search');
+                } else {
+                    showError(data.error || 'An error occurred');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        async function executeCustomQuery() {
+            showLoading();
+            try {
+                const query = document.getElementById('sqlQuery').value;
+                
+                if (!query) {
+                    showError('SQL query is required');
+                    return;
+                }
+                
+                const response = await fetch('/finance/api/mindsdb/execute-query/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: query })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data, 'custom_query');
+                } else {
+                    showError(data.error || 'An error occurred');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

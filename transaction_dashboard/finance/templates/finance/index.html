@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+        }
+        .transactions {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .transactions h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .amount {
+            font-weight: bold;
+            color: #28a745;
+        }
+        .api-links {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+        .api-links a {
+            color: #007bff;
+            text-decoration: none;
+            margin-right: 20px;
+        }
+        .api-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header row align-items-center">
+            <div class="col">
+              <h1>Transaction Dashboard</h1>
+              <p>Financial transaction monitoring and analysis system</p>
+            </div>
+            
+            <div class="col">
+              <span style="float: right">
+                <a class="btn btn-primary btn-sm mt-2 pull-right" href="{% url 'finance:mindsdb_dashboard' %}"><i class="bi bi-arrow-right"></i>MindsDB Dashboard</a>
+              </span>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number">{{ total_clients }}</div>
+                <div class="stat-label">Total Clients</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ total_cards }}</div>
+                <div class="stat-label">Total Cards</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ total_transactions }}</div>
+                <div class="stat-label">Total Transactions</div>
+            </div>
+        </div>
+
+        <div class="transactions">
+            <h2>Recent Transactions</h2>
+            
+            {% if recent_transactions %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Date</th>
+                            <th>Client</th>
+                            <th>Card</th>
+                            <th>Amount</th>
+                            <th>Merchant</th>
+                            <th>Location</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in recent_transactions %}
+                        <tr>
+                            <td>{{ transaction.id }}</td>
+                            <td>{{ transaction.date|date:"M d, Y H:i" }}</td>
+                            <td>{{ transaction.client.id }}</td>
+                            <td>{{ transaction.card.card_brand }} {{ transaction.card.card_type }}</td>
+                            <td class="amount">${{ transaction.amount }}</td>
+                            <td>{{ transaction.merchant_id }}</td>
+                            <td>{{ transaction.merchant_city }}, {{ transaction.merchant_state }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No transactions found.</p>
+            {% endif %}
+        </div>
+
+        <div class="api-links">
+            <h3>API Endpoints</h3>
+            <a href="{% url 'finance:api_clients' %}">/api/clients/</a>
+            <a href="{% url 'finance:api_cards' %}">/api/cards/</a>
+            <a href="{% url 'finance:api_transactions' %}">/api/transactions/</a>
+            <a href="/admin/">Admin Panel</a>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
