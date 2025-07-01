@@ -1,213 +1,168 @@
 -- Connect MindsDB to your PostgreSQL database
 -- Replace 'your_db_name', 'your_db_user', 'your_db_password', 'your_db_host', and 'your_db_port'
 -- with the actual values from your Django project's .env file.
-CREATE DATABASE finance_db
+CREATE DATABASE django_db
 WITH ENGINE = 'postgres',
 PARAMETERS = {
-    "host": 'your_db_host',
+    "host": "your_db_host",
     "port": 5432,
-    "username": 'your_db_user',
-    "password": 'your_db_password',
-    "database": 'your_db_name';
+    "user": "your_db_user", 
+    "password": "your_db_password",
+    "database": "your_db_name"
 };
 
--- ---------------------------------------------------------------------------
+-- Verify the connection
+SHOW DATABASES;
+-- You should see 'django_db' listed with 'postgres' as the engine.
 
 -- MindsDB Knowledge Base Setup: Create and Ingest Data
 
 -- 1. Create a Knowledge Base for Client data
--- We will use 'address' and 'gender' as content for semantic search,
--- and include 'per_capita_income', 'current_age', and 'birth_year' as metadata for filtering.
+-- We'll use 'address' as content for semantic search,
+-- and include other fields as metadata for filtering.
 CREATE KNOWLEDGE_BASE client_kb
-USING 
-    embedding_model = {
-        "provider": "gemini",
-        "model_name": 'gemini-embedding-exp-03-07',
-        "api_key": "xxxxxx"
-    },
-    reranking_model = {
-        "provider": "gemini",
-        "model_name": "gemini-pro",
-        "api_key": "xxxxxx"
-    },
-    content_column = 'address',
-    metadata_columns = ['per_capita_income', 'current_age', 'gender', 'birth_year'];
+USING
+    model = 'sentence_transformers',
+    embeddings_table = 'client_embeddings';
 
--- 2. Create a Knowledge Base for Transaction data
--- We will use 'merchant_city' and 'merchant_state' for semantic search on location,
--- and 'amount', 'use_chip', 'date', and 'client_id' as metadata.
--- Combining columns for more context for the CONTENT_COLUMN (merchant_city, merchant_state)
-
+-- 2. Create a Knowledge Base for Transaction data  
+-- We'll use merchant location data for semantic search
 CREATE KNOWLEDGE_BASE transaction_kb
-USING 
-    embedding_model = {
-        "provider": "gemini",
-        "model_name": 'gemini-embedding-exp-03-07',
-        "api_key": "xxxxxx"
-    },
-    reranking_model = {
-        "provider": "gemini",
-        "model_name": "gemini-pro",
-        "api_key": "xxxxxx"
-    },
-    content_column = ['merchant_city', 'merchant_state'],
-    metadata_columns = ['amount', 'use_chip', 'date', 'client_id'];
+USING
+    model = 'sentence_transformers',
+    embeddings_table = 'transaction_embeddings';
 
--- ------------------------------------------------------------------------------
+-- 3. Insert data into the Knowledge Bases
+-- Insert client data with address as the content to be embedded
+INSERT INTO client_kb (content, metadata)
+SELECT 
+    address as content,
+    JSON_OBJECT(
+        'id', id,
+        'per_capita_income', per_capita_income,
+        'current_age', current_age,
+        'gender', gender,
+        'birth_year', birth_year
+    ) as metadata
+FROM django_db.core_client;
 
--- Ingest data into the Knowledge Bases
+-- Insert transaction data with merchant location as content
+INSERT INTO transaction_kb (content, metadata)
+SELECT 
+    CONCAT(merchant_city, ', ', merchant_state) as content,
+    JSON_OBJECT(
+        'id', id,
+        'amount', amount,
+        'use_chip', use_chip,
+        'date', date,
+        'client_id', client_id
+    ) as metadata
+FROM django_db.core_transaction;
 
-INSERT INTO client_kb SELECT * FROM finance_db.client;
-INSERT INTO transaction_kb SELECT * FROM finance_db.transactions;
+-- Verify the data was inserted
+SELECT COUNT(*) as client_count FROM client_kb;
+SELECT COUNT(*) as transaction_count FROM transaction_kb;
 
--- You can verify the data was inserted by querying the Knowledeg Bases:
-SELECT count(*) FROM client_kb;
-SELECT count(*) FROM transaction_kb;
+-- MindsDB Knowledge Base Semantic Queries
 
--- ------------------------------------------------------------------------------
+-- Example 1: Find clients in wealthy suburban areas and filter by age and income
+SELECT 
+    kb.content,
+    JSON_EXTRACT(kb.metadata, '$.id') as client_id,
+    JSON_EXTRACT(kb.metadata, '$.current_age') as current_age,
+    JSON_EXTRACT(kb.metadata, '$.per_capita_income') as per_capita_income,
+    JSON_EXTRACT(kb.metadata, '$.gender') as gender
+FROM client_kb kb
+WHERE kb.content LIKE 'wealthy suburban areas'
+    AND CAST(JSON_EXTRACT(kb.metadata, '$.current_age') AS INT) > 40
+    AND CAST(JSON_EXTRACT(kb.metadata, '$.per_capita_income') AS INT) > 70000
+ORDER BY kb.distance
+LIMIT 10;
 
--- Create Indexes on your Knowledge Bases
+-- Example 2: Find transactions in areas related to travel and filter for high amounts
+SELECT 
+    kb.content as merchant_location,
+    JSON_EXTRACT(kb.metadata, '$.id') as transaction_id,
+    JSON_EXTRACT(kb.metadata, '$.amount') as amount,
+    JSON_EXTRACT(kb.metadata, '$.date') as date,
+    JSON_EXTRACT(kb.metadata, '$.use_chip') as use_chip,
+    JSON_EXTRACT(kb.metadata, '$.client_id') as client_id
+FROM transaction_kb kb
+WHERE kb.content LIKE 'airport hotels travel'
+    AND CAST(JSON_EXTRACT(kb.metadata, '$.amount') AS DECIMAL) > 500
+    AND JSON_EXTRACT(kb.metadata, '$.use_chip') = true
+ORDER BY kb.distance
+LIMIT 10;
 
-CREATE INDEX ON client_kb;
-CREATE INDEX ON transaction_kb;
-
-
--- -------------------------------------------------------------------------------
-
--- MindsDB Knowledge Base Semantic Queries with Metadata Filtering
--- These commands are what will be run from the django view, they are 
--- included here just for completeness,
-
--- Find clients in "wealthy, suburban areas" and filter by age and income:
-SELECT
-    c.id AS client_id,
-    c.address,
-    c.current_age,
-    c.per_capita_income,
-    c.gender
-FROM
-    client_kb AS c
-WHERE
-    content LIKE 'wealthy, suburban areas' AND 
-    c.current_age > 40 AND                    
-    c.per_capita_income > 70000;              
-
--- Find transactions related to "travel expenses" and filter for high amounts and chip usage:
-SELECT
-    t.id AS transaction_id,
-    t.amount,
-    t.date,
-    t.merchant_city,
-    t.merchant_state,
-    t.use_chip,
-    t.client_id
-FROM
-    transaction_kb AS t
-WHERE
-    content LIKE 'travel expenses' AND   
-    t.amount > 500 AND                   
-    t.use_chip = TRUE;                   
-
--- Find transactions for "online shopping" in a specific state:
-SELECT
-    t.id AS transaction_id,
-    t.amount,
-    t.merchant_city,
-    t.merchant_state,
-    t.client_id
-FROM
-    transaction_kb AS t
-WHERE
-    content LIKE 'online shopping' AND
-    t.merchant_state = 'California'; 
-
--- ------------------------------------------------------------------------------------
+-- Example 3: Find transactions in online shopping areas
+SELECT 
+    kb.content as merchant_location,
+    JSON_EXTRACT(kb.metadata, '$.id') as transaction_id,
+    JSON_EXTRACT(kb.metadata, '$.amount') as amount,
+    JSON_EXTRACT(kb.metadata, '$.client_id') as client_id
+FROM transaction_kb kb  
+WHERE kb.content LIKE 'online e-commerce digital'
+ORDER BY kb.distance
+LIMIT 10;
 
 -- MindsDB Job for Periodic Knowledge Base Updates
 
--- This JOB will run every 1 hour (3600 seconds) and check for new transactions
--- in the 'finance_db.finance_transaction' table, inserting them into 'transaction_kb'.
-
+-- Create a job to periodically update the transaction knowledge base
+-- This will run every hour and add new transactions
 CREATE JOB update_transaction_kb_job (
-    INSERT INTO transaction_kb SELECT * FROM finance_db.finance_transactions WHERE date > LAST;
-) EVERY 1 HOUR; -- or EVERY 3600 SECONDS;
+    INSERT INTO transaction_kb (content, metadata)
+    SELECT 
+        CONCAT(merchant_city, ', ', merchant_state) as content,
+        JSON_OBJECT(
+            'id', id,
+            'amount', amount,
+            'use_chip', use_chip,
+            'date', date,
+            'client_id', client_id
+        ) as metadata
+    FROM django_db.core_transaction
+    WHERE date > (
+        SELECT MAX(CAST(JSON_EXTRACT(metadata, '$.date') AS DATETIME)) 
+        FROM transaction_kb
+    )
+) EVERY 1 hour;
 
+-- To view existing jobs
+SELECT * FROM information_schema.jobs;
 
--- --------------------------------------------------------------------------------------
+-- MindsDB AI Model Integration
 
-
--- MindsDB AI Table Integration with Knowledge Base Results
-
--- Create the Gemini handler, or OPENAI if you can afford it :P :
-CREATE ML_ENGINE google_gemini_engine
-FROM google_gemini
+-- Create an ML engine for OpenAI (replace with your API key)
+CREATE ML_ENGINE openai_engine
+FROM openai
 USING
-    api_key = 'xxxxxx'; -- Replace with your actual API key
+    openai_api_key = 'sk-your-openai-api-key-here';
 
-
--- Create an AI Table that can summarize text.
--- We will define a custom prompt for summarization.
-CREATE ML_MODEL summarize_transactions_model
-PREDICT summary
+-- Create a model for transaction analysis
+CREATE MODEL transaction_analyzer
+PREDICT analysis
 USING
-    engine = 'google_gemini_engine', 
-    model_name = 'gemini-pro',
-    prompt_template = 'Summarize the following transaction details into a concise overview, highlighting key aspects: {{transaction_details}}.';
+    engine = 'openai_engine',
+    model_name = 'gpt-3.5-turbo',
+    prompt_template = 'Analyze the following transaction data and identify any suspicious patterns or anomalies. Transaction details: {{transaction_details}}. Provide a brief summary of your findings.';
 
--- Now, query the Knowledge Base and pipe the results to the AI Table for summarization.
--- Get "suspicious" transactions and summarize them.
--- Semantic search for suspicious transactions
-SELECT
-    t.id AS transaction_id,
-    t.amount,
-    t.date,
-    t.merchant_city,
-    t.merchant_state,
-    t.use_chip,
-    t.client_id,
-    s.summary
-FROM
-    transaction_kb AS t
-JOIN
-    summarize_transactions_model AS s
-ON
-    t.id IS NOT NULL 
-WHERE
-    t.content LIKE 'suspicious activity' AND 
-    s.transaction_details = CONCAT(
-        'Transaction ID: ', t.id,
-        ', Amount: ', t.amount,
-        ', Date: ', t.date,
-        ', Merchant: ', t.merchant_city, ', ', t.merchant_state,
-        ', Used Chip: ', t.use_chip
-    );
-
-
--- REFINED EXAMPLE for AI Table Integration:
-SELECT
-    t.id AS transaction_id,
-    t.amount,
-    t.date,
-    t.merchant_city,
-    t.merchant_state,
-    t.use_chip,
-    t.client_id,
-    s.summary
-FROM
-    transaction_kb AS t
-JOIN
-    summarize_transactions_model AS s ON 1=1 -- Simple join
-WHERE
-    t.content LIKE 'unusual large spending' AND -- Semantic search for unusual spending
-    s.transaction_details = CONCAT( -- This CONCAT creates the input for the prompt_template's `transaction_details` variable
-        'Transaction ID: ', t.id,
-        ', Amount: $', t.amount,
-        ', Date: ', t.date,
-        ', Merchant City: ', t.merchant_city,
-        ', Merchant State: ', t.merchant_state,
-        ', Used Chip: ', t.use_chip,
-        ', Client ID: ', t.client_id
-    );
-
--- This query first semantically searches `transaction_kb` for 'unusual large spending', 
--- and then summarizes the transactiom
+-- Example query combining knowledge base search with AI analysis
+SELECT 
+    kb.content as location,
+    JSON_EXTRACT(kb.metadata, '$.id') as transaction_id,
+    JSON_EXTRACT(kb.metadata, '$.amount') as amount,
+    JSON_EXTRACT(kb.metadata, '$.date') as date,
+    m.analysis
+FROM transaction_kb kb
+JOIN transaction_analyzer m
+WHERE kb.content LIKE 'suspicious unusual activity'
+    AND CAST(JSON_EXTRACT(kb.metadata, '$.amount') AS DECIMAL) > 1000
+    AND m.transaction_details = CONCAT(
+        'ID: ', JSON_EXTRACT(kb.metadata, '$.id'),
+        ', Amount: $', JSON_EXTRACT(kb.metadata, '$.amount'),
+        ', Date: ', JSON_EXTRACT(kb.metadata, '$.date'),
+        ', Location: ', kb.content,
+        ', Chip Used: ', JSON_EXTRACT(kb.metadata, '$.use_chip')
+    )
+ORDER BY kb.distance
+LIMIT 5;
